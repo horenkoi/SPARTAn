@@ -1,0 +1,72 @@
+function [W]=SPARTA_EvaluateW_v2(X,pi,idx,COV,C,Lambda,d,T,K,m,W,eps_C,reg_param)
+%options=optimset('GradObj','on','Algorithm','sqp','MaxIter',20,'Display','off','TolFun',1e-13,'TolCon',1e-13,'TolX',1e-13,...
+%    'TolConSQP',1e-13,'TolGradCon',1e-13,'TolPCG',1e-13,'MaxFunEval',20000,'UseParallel',false);
+A=-speye(d);b=sparse(d,1);
+
+alpha=0;bet=0;disc_dist=sparse(d,1);
+for k=1:K
+    %idx{k}=find(gamma(k,:)==1);
+    for i=1:d
+        disc_dist(i)=disc_dist(i)+sum((X(i,idx{k})-C(i,k)).^2);
+    end
+    %Xb=zeros(d,length(idx{k}));
+    for ind_m=1:m
+        %for i=1:d
+        %    Xb(i,:)=Lambda(ind_m,i+1,k)*X(i,idx{k});
+        %end
+        alpha=alpha+(Lambda(ind_m,2:(d+1),k)'*Lambda(ind_m,2:(d+1),k)).*COV{k};
+        bet=bet+(Lambda(ind_m,2:(d+1),k).*((pi(ind_m,idx{k})-Lambda(ind_m,1,k))*(X(:,idx{k}))'));
+    end
+end
+alpha=alpha*reg_param/(T*m);
+bet=-2*bet*reg_param/(T*m)+disc_dist'*(1/T);
+%gam=(1/T)*trace(gamma'*C'*C*gamma);
+%(X-C*gamma);alpha=sum(alpha.^2,2)';
+Aeq=ones(1,d);beq=1;
+%tic;
+%options = optimoptions(@fmincon,...
+%    'Algorithm','interior-point',...
+%    'MaxIter',20,...
+%    'SpecifyObjectiveGradient',true, ...
+%    'Display','off','TolFun',1e-20,'TolCon',1e-14,'TolPCG',1e-14,'TolX',...
+%    1e-14,'TolConSQP',1e-14,'TolGradCon',1e-14,'TolPCG',1e-14,'OptimalityTolerance',1e-20,'StepTolerance',1e-20);
+options = optimoptions(@fmincon,...
+    'Algorithm','interior-point',...
+    'MaxIter',200,...
+    'SpecifyObjectiveGradient',true, ...
+    'HessianFcn',@(x,lambda)hessinterior(x,lambda,alpha,eps_C),'HessPattern',0,...
+    'Display','off','TolFun',1e-14,'TolCon',1e-14,'TolPCG',1e-14,'TolX',...
+    1e-14,'TolConSQP',1e-14,'TolGradCon',1e-14,'TolPCG',1e-14,'OptimalityTolerance',1e-10,'StepTolerance',1e-10);
+
+options.ConstraintTolerance = 1e-12;
+
+fff0=LogLik_SPACL_W(W,d,alpha,bet,eps_C);
+W_old=W;
+[W,fff,flag,output] =  fmincon(@(x)LogLik_SPACL_W...
+    (x,d,alpha,bet,eps_C)...
+    ,W,(A),(b),Aeq,beq,[],[],[],options);
+W=abs(W);
+fff=LogLik_SPACL_W(W,d,alpha,bet,eps_C);
+if fff0<fff
+    W=W_old;
+end
+%toc
+%fun=LogLik_SPACL_Lambda(xxx0,gamma,pi,m,K)-LogLik_SPACL_Lambda(xxx,gamma,pi,m,K);[fun]=LogLik_SPACL_gamma(xxx0,X(:,t),pi(:,t),Lambda,eps1,eps2,C,CTC)-fff
+
+end
+
+function [fun,grad]=LogLik_SPACL_W(W,d,alpha,beta,eps_C)
+fun=beta*W'+W*alpha*W'+eps_C*sum(W.*(log(max(W,1e-12))));
+grad=real(beta+2*(alpha*W')'+eps_C.*(log(max(W,1e-12))+ones(1,d)));
+end
+
+function H = hessinterior(W,lambda,alpha,eps_C)
+%HMFLEQ1 Hessian-matrix product function for BROWNVV objective.
+%   W = hmfleq1(Hinfo,Y,V) computes W = (Hinfo-V*V')*Y
+%   where Hinfo is a sparse matrix computed by BROWNVV 
+%   and V is a 2 column matrix.
+H=2*alpha+diag(eps_C./max(W,1e-12));
+
+end
+
+

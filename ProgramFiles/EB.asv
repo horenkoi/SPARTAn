@@ -1,0 +1,22 @@
+function [] = EB(DD,X)
+%UNTITLED Summary of this function goes here
+%   Detailed explanation goes here
+X(X==0) = NaN;
+D=size(X,1);
+for i=1:size(X,2)  
+    if sum(isnan(X(:,i)))<D
+      %pd = fitdist(X(:,i),'Normal');
+      %ci = paramci(pd);
+      ci=std(X(:,i))
+      mu(i)=pd.mu;
+      ci(1,1)=max(ci(1,1),0);
+      pl(i)=ci(1,1)-mu(i);
+      mi(i)=mu(i)-ci(2,1);
+    else
+      mu(i)=NaN;
+      pl(i)=0;
+      mi(i)=0;
+    end
+end
+hold on;errorbar(DD,mu,mi,pl);
+end
